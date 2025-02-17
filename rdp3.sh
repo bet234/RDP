@@ -1,65 +1,89 @@
 #!/bin/bash
 
-# Set default username and password
+# Colors
+RED='\e[31m'
+GREEN='\e[32m'
+BLUE='\e[34m'
+YELLOW='\e[33m'
+RESET='\e[0m'
+
+# ASCII Art
+clear
+echo -e "${YELLOW}🚀 Welcome to the Chrome Remote Desktop Installer! 🚀${RESET}"
+echo -e "${GREEN}=============================================${RESET}"
+echo -e "${BLUE}  ____ _                                _    "
+echo -e "${BLUE} / ___| |__   ___  ___  ___  _ __   ___| |_  "
+echo -e "${BLUE}| |   | '_ \ / _ \/ __|/ _ \| '_ \ / _ \ __| "
+echo -e "${BLUE}| |___| | | |  __/\__ \ (_) | | | |  __/ |_  "
+echo -e "${BLUE} \____|_| |_|\___||___/\___/|_| |_|\___|\__| "
+echo -e "${GREEN}=============================================${RESET}"
+
+# Guide to get CRP
+echo -e "${GREEN}🔹 To get your Chrome Remote Desktop Code (CRP):${RESET}"
+echo -e "${YELLOW}1. Open Google Chrome and go to: https://remotedesktop.google.com/access${RESET}"
+echo -e "${YELLOW}2. Sign in with your Google account.${RESET}"
+echo -e "${YELLOW}3. Click on 'Set up another computer'.${RESET}"
+echo -e "${YELLOW}4. Install the Chrome Remote Desktop Host if prompted.${RESET}"
+echo -e "${YELLOW}5. Click 'Generate Code' and copy the CRP.${RESET}"
+
+# Ask for CRP
+read -p "🔑 Enter your Chrome Remote Desktop Code (CRP): " crp
+
+# Set default values
 username="user"
 password="root"
+chrome_remote_desktop_url="https://dl.google.com/linux/direct/chrome-remote-desktop_current_amd64.deb"
 
-# Set default CRP value
-CRP=""
+# Function to log messages
+log() {
+    echo -e "${YELLOW}$(date +'%Y-%m-%d %H:%M:%S') - $1${RESET}"
+}
 
-# Set default Pin value
-Pin="123456"
+# Function to install packages
+install_package() {
+    package_url=$1
+    log "📥 Downloading $package_url"
+    wget -q --show-progress "$package_url"
+    log "📦 Installing $(basename $package_url)"
+    sudo dpkg --install $(basename $package_url)
+    log "🔧 Fixing broken dependencies"
+    sudo apt-get install --fix-broken -y
+    rm $(basename $package_url)
+}
 
-# Set default Autostart value
-Autostart=true
+# Installation steps
+log "🚀 Starting installation"
 
-echo "Creating User and Setting it up"
+# Create user
+log "👤 Creating user '$username'"
 sudo useradd -m "$username"
-sudo adduser "$username" sudo
 echo "$username:$password" | sudo chpasswd
 sudo sed -i 's/\/bin\/sh/\/bin\/bash/g' /etc/passwd
-echo "User created and configured with username '$username' and password '$password'"
 
-echo "Installing necessary packages"
-sudo apt update
-sudo apt install -y xfce4 desktop-base xfce4-terminal tightvncserver wget
+# Install Chrome Remote Desktop
+install_package "$chrome_remote_desktop_url"
 
-echo "Setting up Chrome Remote Desktop"
-echo "Installing Chrome Remote Desktop"
-wget https://dl.google.com/linux/direct/chrome-remote-desktop_current_amd64.deb
-sudo dpkg --install chrome-remote-desktop_current_amd64.deb
-sudo apt install --assume-yes --fix-broken
+# Install XFCE desktop environment
+log "🎨 Installing XFCE desktop environment"
+sudo DEBIAN_FRONTEND=noninteractive apt-get install --assume-yes -y xfce4 desktop-base dbus-x11 xscreensaver
 
-echo "Installing Desktop Environment"
-export DEBIAN_FRONTEND=noninteractive
-sudo apt install --assume-yes xfce4 desktop-base xfce4-terminal
-echo "exec /etc/X11/Xsession /usr/bin/xfce4-session" | sudo tee /etc/chrome-remote-desktop-session
-sudo apt remove --assume-yes gnome-terminal
-sudo apt install --assume-yes xscreensaver
+# Set up Chrome Remote Desktop session
+log "🖥️ Setting up Chrome Remote Desktop session"
+sudo bash -c 'echo "exec /etc/X11/Xsession /usr/bin/xfce4-session" > /etc/chrome-remote-desktop-session'
+
+# Disable lightdm service
+log "⛔ Disabling lightdm service"
 sudo systemctl disable lightdm.service
 
-echo "Installing Google Chrome"
-wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-sudo dpkg --install google-chrome-stable_current_amd64.deb
-sudo apt install --assume-yes --fix-broken
+# Install Firefox ESR
+log "🔥 Installing Firefox ESR"
+sudo apt update
+sudo add-apt-repository ppa:mozillateam/ppa
+sudo apt update
+sudo apt install firefox-esr -y
 
-# Prompt user for CRP value
-read -p "Enter CRP value: " CRP
+# Start Chrome Remote Desktop
+log "🚀 Starting Chrome Remote Desktop"
+DISPLAY=":1" /opt/google/chrome-remote-desktop/start-host --code="$crp" &
 
-echo "Finalizing"
-if [ "$Autostart" = true ]; then
-    mkdir -p "/home/$username/.config/autostart"
-    link="https://youtu.be/d9ui27vVePY?si=TfVDVQOd0VHjUt_b"
-    colab_autostart="[Desktop Entry]\nType=Application\nName=Colab\nExec=sh -c 'sensible-browser $link'\nIcon=\nComment=Open a predefined notebook at session signin.\nX-GNOME-Autostart-enabled=true"
-    echo -e "$colab_autostart" | sudo tee "/home/$username/.config/autostart/colab.desktop"
-    sudo chmod +x "/home/$username/.config/autostart/colab.desktop"
-    sudo chown "$username:$username" "/home/$username/.config"
-fi
-
-sudo adduser "$username" chrome-remote-desktop
-command="$CRP --pin=$Pin"
-sudo su - "$username" -c "$command"
-sudo service chrome-remote-desktop start
-
-echo "Finished Successfully"
-while true; do sleep 10; done
+log "✅ Installation completed successfully! 🎉 Enjoy your remote desktop!"
